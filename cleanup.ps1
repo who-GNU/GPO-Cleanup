@@ -114,13 +114,24 @@ $btnFlagGPOs.Add_Click({
     # Retrieve all GPOs and apply criteria:
     #   - ModificationTime more than 30 days ago AND
     #   - Not linked (assuming the Links property reflects OU links)
+    # Fetch all GPOs
     $allGPOs = Get-GPO -All
+
+    # Retrieve all linked GPOs from Active Directory
+    $linkedGPOs = Get-ADObject -LDAPFilter "(gPLink=*)" -SearchBase "DC=YourDomain,DC=com" -SearchScope Subtree |
+        Select-Object -ExpandProperty gPLink
+
+    # Extract GUIDs from the gPLink attribute (GPO links are stored as `[{GUID};0]`)
+    $linkedGPOs = $linkedGPOs -match "{.*?}" | ForEach-Object { $_ -match "{(.*?)}"; $matches[1] }
+
+    # Filter out linked GPOs
     $flaggedGPOs = $allGPOs | Where-Object {
         $daysSinceModified = (New-TimeSpan -Start $_.ModificationTime -End (Get-Date)).Days
         $isOld = $daysSinceModified -gt 30
-        $isUnlinked = (($_.Links -eq $null) -or ($_.Links.Count -eq 0))
+        $isUnlinked = -not ($_.Id.Guid -in $linkedGPOs)  # Check if it's linked in AD
         $isOld -and $isUnlinked
     }
+    
 
     # Clear the list and populate with flagged GPOs as custom objects.
     $lstGPOs.Items.Clear()
