@@ -1,0 +1,89 @@
+param (
+    [Parameter(Mandatory=$true)]
+    [int]$DaysThreshold
+)
+
+# Import the GroupPolicy module
+Import-Module GroupPolicy
+
+# Get the current date to compare with
+$CurrentDate = Get-Date
+
+# Function to check if a GPO is linked anywhere
+function Test-GPOIsLinked {
+    param (
+        [Parameter(Mandatory=$true)]
+        [string]$GpoId
+    )
+    
+    # Get all SOM links for this GPO
+    $Links = Get-GPOReport -Guid $GpoId -ReportType Xml | 
+             Select-Xml -XPath "//LinksTo" | 
+             Select-Object -ExpandProperty Node
+    
+    # Return $true if there are any links, $false otherwise
+    return ($Links.Count -gt 0)
+}
+
+# Get all GPOs in the domain
+Write-Host "Retrieving all GPOs in the domain..." -ForegroundColor Cyan
+$AllGPOs = Get-GPO -All
+
+# Initialize results arrays
+$UnlinkedGPOs = @()
+$OldGPOs = @()
+
+Write-Host "Processing GPOs..." -ForegroundColor Cyan
+foreach ($GPO in $AllGPOs) {
+    $IsLinked = Test-GPOIsLinked -GpoId $GPO.Id.Guid
+    $ModificationTime = $GPO.ModificationTime
+    $DaysSinceModified = ($CurrentDate - $ModificationTime).Days
+    
+    # Check if GPO is unlinked
+    if (-not $IsLinked) {
+        $UnlinkedGPOs += [PSCustomObject]@{
+            Name = $GPO.DisplayName
+            ID = $GPO.Id.Guid
+            CreationTime = $GPO.CreationTime
+            ModificationTime = $ModificationTime
+            DaysSinceModified = $DaysSinceModified
+        }
+    }
+    
+    # Check if GPO hasn't been modified within threshold
+    if ($DaysSinceModified -gt $DaysThreshold) {
+        $OldGPOs += [PSCustomObject]@{
+            Name = $GPO.DisplayName
+            ID = $GPO.Id.Guid
+            IsLinked = $IsLinked
+            CreationTime = $GPO.CreationTime
+            ModificationTime = $ModificationTime
+            DaysSinceModified = $DaysSinceModified
+        }
+    }
+}
+
+# Display results
+Write-Host "`n=========================" -ForegroundColor Yellow
+Write-Host "UNLINKED GPOs:" -ForegroundColor Yellow
+Write-Host "=========================" -ForegroundColor Yellow
+$UnlinkedGPOs | Format-Table -AutoSize
+
+Write-Host "`n=========================" -ForegroundColor Yellow
+Write-Host "GPOs not modified in the last $DaysThreshold days:" -ForegroundColor Yellow
+Write-Host "=========================" -ForegroundColor Yellow
+$OldGPOs | Format-Table -AutoSize
+
+# Create a combined report of unlinked GPOs that are also old
+$UnlinkedAndOld = $UnlinkedGPOs | Where-Object { $_.DaysSinceModified -gt $DaysThreshold }
+
+Write-Host "`n=========================" -ForegroundColor Green
+Write-Host "UNLINKED GPOs not modified in the last $DaysThreshold days:" -ForegroundColor Green
+Write-Host "=========================" -ForegroundColor Green
+$UnlinkedAndOld | Format-Table -AutoSize
+
+# Export results to CSV if needed
+$ExportPath = Join-Path -Path $PWD -ChildPath "GPO_Audit_Report_$(Get-Date -Format 'yyyyMMdd').csv"
+$UnlinkedAndOld | Export-Csv -Path $ExportPath -NoTypeInformation
+
+Write-Host "`nReport exported to: $ExportPath" -ForegroundColor Cyan
