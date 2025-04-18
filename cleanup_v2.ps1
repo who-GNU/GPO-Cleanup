@@ -23,15 +23,24 @@ function Test-GPOIsLinked {
     
     # Check domain root
     $DomainRoot = Get-ADDomain
-    if ($DomainRoot.LinkedGroupPolicyObjects -match $FormattedGpoId) {
+    if ($DomainRoot.LinkedGroupPolicyObjects -contains $FormattedGpoId) {
         return $true
+    }
+    
+    # Alternate check for domain root using string comparison
+    foreach ($Link in $DomainRoot.LinkedGroupPolicyObjects) {
+        if ($Link -like "*$GpoId*") {
+            return $true
+        }
     }
     
     # Check all OUs
     $AllOUs = Get-ADOrganizationalUnit -Filter * -Properties LinkedGroupPolicyObjects
     foreach ($OU in $AllOUs) {
-        if ($OU.LinkedGroupPolicyObjects -match $FormattedGpoId) {
-            return $true
+        foreach ($Link in $OU.LinkedGroupPolicyObjects) {
+            if ($Link -like "*$GpoId*") {
+                return $true
+            }
         }
     }
     
