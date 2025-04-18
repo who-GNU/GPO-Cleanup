@@ -11,20 +11,21 @@ Import-Module ActiveDirectory
 # Get the current date to compare with
 $CurrentDate = Get-Date
 
-# Function to check if a GPO is linked anywhere in the domain
-function Test-GPOIsLinked {
-    param (
-        [Parameter(Mandatory=$true)]
-        [string]$GpoId
-    )
+# Function to collect all linked GPO GUIDs in the domain
+function Get-LinkedGPOGuids {
+    $LinkedGPOGuids = @{}
+    
+    Write-Host "Collecting all linked GPOs..." -ForegroundColor Cyan
     
     # Check domain root
     try {
         $DomainRoot = Get-ADDomain
         if ($DomainRoot.LinkedGroupPolicyObjects) {
             foreach ($Link in $DomainRoot.LinkedGroupPolicyObjects) {
-                if ($Link -like "*$GpoId*") {
-                    return $true
+                # Extract GUID from the link string
+                if ($Link -match '\{([0-9a-fA-F-]+)\}') {
+                    $Guid = $Matches[1]
+                    $LinkedGPOGuids[$Guid] = $true
                 }
             }
         }
@@ -38,8 +39,10 @@ function Test-GPOIsLinked {
         foreach ($OU in $AllOUs) {
             if ($OU.LinkedGroupPolicyObjects) {
                 foreach ($Link in $OU.LinkedGroupPolicyObjects) {
-                    if ($Link -like "*$GpoId*") {
-                        return $true
+                    # Extract GUID from the link string
+                    if ($Link -match '\{([0-9a-fA-F-]+)\}') {
+                        $Guid = $Matches[1]
+                        $LinkedGPOGuids[$Guid] = $true
                     }
                 }
             }
@@ -48,8 +51,11 @@ function Test-GPOIsLinked {
         Write-Warning "Error checking OU links: $_"
     }
     
-    return $false
+    return $LinkedGPOGuids
 }
+
+# Collect all linked GPO GUIDs
+$LinkedGPOGuids = Get-LinkedGPOGuids
 
 # Get all GPOs in the domain
 Write-Host "Retrieving all GPOs in the domain..." -ForegroundColor Cyan
@@ -66,7 +72,8 @@ foreach ($GPO in $AllGPOs) {
     $CurrentCount++
     Write-Progress -Activity "Checking GPO links" -Status "Processing $($GPO.DisplayName)" -PercentComplete (($CurrentCount / $TotalCount) * 100)
     
-    $IsLinked = Test-GPOIsLinked -GpoId $GPO.Id.Guid
+    # Check if GPO is linked by looking up its GUID in the hashtable
+    $IsLinked = $LinkedGPOGuids.ContainsKey($GPO.Id.Guid.ToString())
     $ModificationTime = $GPO.ModificationTime
     $DaysSinceModified = ($CurrentDate - $ModificationTime).Days
     
