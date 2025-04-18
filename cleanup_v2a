@@ -221,11 +221,14 @@ $titleLabel.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawin
 $titleLabel.AutoSize = $true
 $titleLabel.Location = New-Object System.Drawing.Point(20, 20)
 
+# Fixed: Increased Y position for the description label to prevent overlap
 $descriptionLabel = New-Object System.Windows.Forms.Label
 $descriptionLabel.Text = "Find unlinked GPOs and those that haven't been modified recently."
 $descriptionLabel.AutoSize = $true
 $descriptionLabel.Location = New-Object System.Drawing.Point(20, 60)
+$descriptionLabel.Size = New-Object System.Drawing.Size(750, 20) # Fixed width to ensure it has enough space
 
+# Adjusted spacing for all controls below
 $daysLabel = New-Object System.Windows.Forms.Label
 $daysLabel.Text = "Days since last modification:"
 $daysLabel.AutoSize = $true
