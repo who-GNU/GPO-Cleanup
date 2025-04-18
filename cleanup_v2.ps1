@@ -18,30 +18,34 @@ function Test-GPOIsLinked {
         [string]$GpoId
     )
     
-    # Format the GPO ID in the same format as it appears in LinkedGroupPolicyObjects
-    $FormattedGpoId = "[{0}]" -f $GpoId
-    
     # Check domain root
-    $DomainRoot = Get-ADDomain
-    if ($DomainRoot.LinkedGroupPolicyObjects -contains $FormattedGpoId) {
-        return $true
-    }
-    
-    # Alternate check for domain root using string comparison
-    foreach ($Link in $DomainRoot.LinkedGroupPolicyObjects) {
-        if ($Link -like "*$GpoId*") {
-            return $true
+    try {
+        $DomainRoot = Get-ADDomain
+        if ($DomainRoot.LinkedGroupPolicyObjects) {
+            foreach ($Link in $DomainRoot.LinkedGroupPolicyObjects) {
+                if ($Link -like "*$GpoId*") {
+                    return $true
+                }
+            }
         }
+    } catch {
+        Write-Warning "Error checking domain root links: $_"
     }
     
     # Check all OUs
-    $AllOUs = Get-ADOrganizationalUnit -Filter * -Properties LinkedGroupPolicyObjects
-    foreach ($OU in $AllOUs) {
-        foreach ($Link in $OU.LinkedGroupPolicyObjects) {
-            if ($Link -like "*$GpoId*") {
-                return $true
+    try {
+        $AllOUs = Get-ADOrganizationalUnit -Filter * -Properties LinkedGroupPolicyObjects
+        foreach ($OU in $AllOUs) {
+            if ($OU.LinkedGroupPolicyObjects) {
+                foreach ($Link in $OU.LinkedGroupPolicyObjects) {
+                    if ($Link -like "*$GpoId*") {
+                        return $true
+                    }
+                }
             }
         }
+    } catch {
+        Write-Warning "Error checking OU links: $_"
     }
     
     return $false
